@@ -916,7 +916,7 @@ def inject_css() -> None:
             gap: .75rem;
             margin: .75rem 0 1.1rem;
         }
-        .metric-card, .news-card, .profile-panel {
+        .metric-card, .news-card, .profile-panel, .mobile-card {
             border: 1px solid #d9dee8;
             background: #ffffff;
             border-radius: 8px;
@@ -964,6 +964,41 @@ def inject_css() -> None:
             margin-bottom: 1rem;
             line-height: 1.45;
         }
+        .mobile-card {
+            margin-bottom: .75rem;
+        }
+        .mobile-card-title {
+            font-weight: 800;
+            color: #111827;
+            margin-bottom: .15rem;
+        }
+        .mobile-card-subtitle {
+            color: #667085;
+            font-size: .82rem;
+            margin-bottom: .7rem;
+        }
+        .mobile-card-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: .55rem;
+            margin-bottom: .65rem;
+        }
+        .mobile-card-label {
+            color: #667085;
+            font-size: .72rem;
+            line-height: 1.2;
+        }
+        .mobile-card-value {
+            color: #111827;
+            font-weight: 700;
+            font-size: .9rem;
+            line-height: 1.25;
+        }
+        .mobile-card-note {
+            color: #374151;
+            font-size: .8rem;
+            line-height: 1.35;
+        }
         @media (max-width: 900px) {
             .metric-strip, .news-grid { grid-template-columns: 1fr; }
         }
@@ -992,6 +1027,42 @@ def render_metric_strip(snapshot: StockSnapshot) -> None:
     st.markdown(html, unsafe_allow_html=True)
 
 
+def render_value(label: str, value: str) -> str:
+    return (
+        "<div>"
+        f'<div class="mobile-card-label">{escape(label)}</div>'
+        f'<div class="mobile-card-value">{escape(value)}</div>'
+        "</div>"
+    )
+
+
+def render_stock_cards(display_df: pd.DataFrame) -> None:
+    for _, row in display_df.iterrows():
+        upside = row["Upside %"]
+        upside_text = "NA" if pd.isna(upside) else f"{upside:.2f}%"
+        beta = row["Beta"]
+        beta_text = "NA" if pd.isna(beta) else f"{beta:.2f}"
+        html = (
+            '<div class="mobile-card">'
+            f'<div class="mobile-card-title">{escape(str(row["Stock"]))}</div>'
+            f'<div class="mobile-card-subtitle">{escape(str(row["Company"]))}</div>'
+            '<div class="mobile-card-grid">'
+            + render_value("CMP", format_inr(row["CMP"]))
+            + render_value("Target", format_inr(row["Consensus Target"]))
+            + render_value("Upside", upside_text)
+            + render_value("Beta", beta_text)
+            + render_value("0.15 Delta", format_inr(row["0.15 Delta Put Strike"]))
+            + render_value("0.30 Delta", format_inr(row["0.30 Delta Put Strike"]))
+            + "</div>"
+            f'<div class="mobile-card-note"><strong>{escape(str(row["Sector"]))}</strong> | '
+            f'{escape(str(row["Industry"]))}<br>{escape(str(row["Industry Outlook"]))}</div>'
+            "</div>"
+        )
+        st.markdown(html, unsafe_allow_html=True)
+        with st.expander("Forecast links"):
+            st.markdown(source_badges(str(row["Stock"])), unsafe_allow_html=True)
+
+
 def render_shortlist_tab(shortlist: pd.DataFrame, corpus: float) -> None:
     if shortlist.empty:
         st.info("No F&O stocks currently meet the selected filters.")
@@ -1012,44 +1083,72 @@ def render_shortlist_tab(shortlist: pd.DataFrame, corpus: float) -> None:
         "Industry Outlook",
     ]
 
-    controls_col, links_col = st.columns([1.4, 4.6])
-    with controls_col:
-        forecast_symbol = st.selectbox(
-            "Links for",
-            shortlist["Stock"].tolist(),
-            format_func=lambda symbol: (
-                f"{symbol} - "
-                f"{shortlist.loc[shortlist['Stock'] == symbol, 'Company'].iloc[0]}"
-            ),
-            label_visibility="collapsed",
-            help="Choose a stock to see every forecast source.",
-        )
-    with links_col:
-        st.markdown(source_badges(forecast_symbol), unsafe_allow_html=True)
-
-    table_height = min(7200, max(260, 36 * (len(display_df) + 1)))
-    st.dataframe(
-        display_df[display_columns],
-        use_container_width=True,
-        hide_index=True,
-        height=table_height,
-        column_config={
-            "CMP": st.column_config.NumberColumn("CMP", format="Rs. %.2f"),
-            "Consensus Target": st.column_config.NumberColumn(
-                "Consensus Target", format="Rs. %.2f"
-            ),
-            "Upside %": st.column_config.NumberColumn("Upside %", format="%.2f%%"),
-            "Beta": st.column_config.NumberColumn("Beta", format="%.2f"),
-            "0.15 Delta Put Strike": st.column_config.NumberColumn(
-                "0.15 Delta Put Strike", format="Rs. %.2f"
-            ),
-            "0.30 Delta Put Strike": st.column_config.NumberColumn(
-                "0.30 Delta Put Strike", format="Rs. %.2f"
-            ),
-        },
+    view_mode = st.radio(
+        "View mode",
+        ["Cards", "Table"],
+        horizontal=True,
+        help="Use Cards on phone; Table is better on desktop.",
     )
+
+    if view_mode == "Cards":
+        sort_col, search_col = st.columns([1.2, 2.5])
+        with sort_col:
+            sort_by = st.selectbox(
+                "Sort cards by",
+                ["Upside %", "CMP", "Beta", "Stock"],
+            )
+        with search_col:
+            query = st.text_input("Search stock/company", "")
+        card_df = display_df.copy()
+        if query.strip():
+            needle = query.strip().lower()
+            card_df = card_df[
+                card_df["Stock"].str.lower().str.contains(needle, na=False)
+                | card_df["Company"].str.lower().str.contains(needle, na=False)
+            ]
+        ascending = sort_by in {"Stock"}
+        card_df = card_df.sort_values(sort_by, ascending=ascending, na_position="last")
+        render_stock_cards(card_df)
+    else:
+        controls_col, links_col = st.columns([1.4, 4.6])
+        with controls_col:
+            forecast_symbol = st.selectbox(
+                "Links for",
+                shortlist["Stock"].tolist(),
+                format_func=lambda symbol: (
+                    f"{symbol} - "
+                    f"{shortlist.loc[shortlist['Stock'] == symbol, 'Company'].iloc[0]}"
+                ),
+                label_visibility="collapsed",
+                help="Choose a stock to see every forecast source.",
+            )
+        with links_col:
+            st.markdown(source_badges(forecast_symbol), unsafe_allow_html=True)
+
+        table_height = min(7200, max(260, 36 * (len(display_df) + 1)))
+        st.dataframe(
+            display_df[display_columns],
+            use_container_width=True,
+            hide_index=True,
+            height=table_height,
+            column_config={
+                "CMP": st.column_config.NumberColumn("CMP", format="Rs. %.2f"),
+                "Consensus Target": st.column_config.NumberColumn(
+                    "Consensus Target", format="Rs. %.2f"
+                ),
+                "Upside %": st.column_config.NumberColumn("Upside %", format="%.2f%%"),
+                "Beta": st.column_config.NumberColumn("Beta", format="%.2f"),
+                "0.15 Delta Put Strike": st.column_config.NumberColumn(
+                    "0.15 Delta Put Strike", format="Rs. %.2f"
+                ),
+                "0.30 Delta Put Strike": st.column_config.NumberColumn(
+                    "0.30 Delta Put Strike", format="Rs. %.2f"
+                ),
+            },
+        )
     st.caption(
-        "Click any column header to sort. Forecast links use the compact selector above. "
+        "Use Cards on phone and Table on desktop. Forecast links are inside each card "
+        "or above the desktop table. "
         "Investing uses direct India consensus-estimates pages where available. "
         "Refinitiv/LSEG consensus generally requires a licensed feed."
     )
@@ -1162,6 +1261,30 @@ def render_deep_dive_tab(available_symbols: list[str]) -> None:
         st.divider()
 
 
+def render_ipo_cards(ipo_frame: pd.DataFrame) -> None:
+    for _, row in ipo_frame.iterrows():
+        html = (
+            '<div class="mobile-card">'
+            f'<div class="mobile-card-title">{escape(str(row["IPO Name"]))}</div>'
+            f'<div class="mobile-card-subtitle">{escape(str(row["Type"]))} | {escape(str(row["Date"]))}</div>'
+            '<div class="mobile-card-grid">'
+            + render_value("GMP", str(row["IPO GMP"]))
+            + render_value("Price Band", str(row["Price Band"]))
+            + render_value("Est. Listing", str(row["Est. Listing"]))
+            + render_value("Status", str(row["Status"]))
+            + "</div>"
+            f'<div class="mobile-card-note">{escape(str(row["Research Note"]))}'
+            f'{("<br>" + escape(str(row["Alert"]))) if str(row["Alert"]) else ""}</div>'
+            "</div>"
+        )
+        st.markdown(html, unsafe_allow_html=True)
+        link_cols = st.columns(2)
+        with link_cols[0]:
+            st.link_button("IPO Details", str(row["Source"]), use_container_width=True)
+        with link_cols[1]:
+            st.link_button("AI Research", str(row["AI Research"]), use_container_width=True)
+
+
 def render_ipo_tab() -> None:
     ipo_frame, source_name = fetch_open_ipos()
     st.caption(
@@ -1175,6 +1298,15 @@ def render_ipo_tab() -> None:
     if not active_alerts.empty:
         for _, row in active_alerts.iterrows():
             st.warning(f"{row['IPO Name']}: {row['Alert']}")
+
+    view_mode = st.radio("IPO view", ["Cards", "Table"], horizontal=True)
+    if view_mode == "Cards":
+        render_ipo_cards(ipo_frame)
+        st.caption(
+            "Research note is a simple GMP-based flag, not a recommendation. Review "
+            "financials, valuation, promoter background, and listing risk before deciding."
+        )
+        return
 
     display_columns = [
         "IPO Name",
