@@ -1350,8 +1350,14 @@ def render_ipo_cards(ipo_frame: pd.DataFrame) -> None:
 
 
 def render_ipo_tab() -> None:
-    ipo_frame, source_name = fetch_open_ipos()
-    ipo_frame = enrich_ipo_frame(ipo_frame)
+    try:
+        ipo_frame, source_name = fetch_open_ipos()
+        ipo_frame = enrich_ipo_frame(ipo_frame)
+    except Exception as error:
+        st.warning("IPO data is temporarily unavailable. The rest of the dashboard is working.")
+        st.caption(f"IPO loader error: {error}")
+        return
+
     st.caption(
         f"Source: {source_name}. GMP is unofficial grey-market data and can change quickly."
     )
@@ -1434,6 +1440,14 @@ def render_data_quality_warnings(snapshots: list[StockSnapshot]) -> None:
             + ", ".join(missing_targets[:20])
             + ("..." if len(missing_targets) > 20 else "")
         )
+
+
+def render_guarded(section_name: str, render_fn: Any) -> None:
+    try:
+        render_fn()
+    except Exception as error:
+        st.warning(f"{section_name} is temporarily unavailable.")
+        st.caption(f"Error: {error}")
 
 
 def main() -> None:
@@ -1551,11 +1565,14 @@ def main() -> None:
         ["All Ideas", "Deep Dive & News", "Open IPOs"]
     )
     with tab_ideas:
-        render_shortlist_tab(shortlist, float(corpus))
+        render_guarded(
+            "All Ideas",
+            lambda: render_shortlist_tab(shortlist, float(corpus)),
+        )
     with tab_deep_dive:
-        render_deep_dive_tab(fo_symbols)
+        render_guarded("Deep Dive & News", lambda: render_deep_dive_tab(fo_symbols))
     with tab_ipos:
-        render_ipo_tab()
+        render_guarded("Open IPOs", render_ipo_tab)
 
     st.caption(
         "Educational tool only. Verify option chains, lot sizes, liquidity, margin, "
