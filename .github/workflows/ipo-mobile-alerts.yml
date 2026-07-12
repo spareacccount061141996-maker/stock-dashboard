@@ -5,6 +5,15 @@ on:
     - cron: "30 4 * * 1-5"
     - cron: "0 10 * * 1-5"
   workflow_dispatch:
+    inputs:
+      send_test:
+        description: "Send a Telegram test notification"
+        required: true
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
 
 jobs:
   ipo-alerts:
@@ -36,7 +45,12 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python ipo_notifications.py
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.send_test }}" == "true" ]]; then
+            python ipo_notifications.py --test-message
+          else
+            python ipo_notifications.py
+          fi
 
       - name: Ensure notification state directory exists
         if: always()

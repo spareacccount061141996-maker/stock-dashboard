@@ -159,7 +159,29 @@ def send_telegram(message: str, bot_token: str, chat_id: str) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Send IPO GMP mobile alerts.")
     parser.add_argument("--dry-run", action="store_true", help="Print alerts without sending.")
+    parser.add_argument(
+        "--test-message",
+        action="store_true",
+        help="Send a Telegram test notification and skip IPO scanning.",
+    )
     args = parser.parse_args()
+
+    bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID", "")
+    if args.test_message:
+        message = (
+            "IPO alert test\n\n"
+            "Telegram mobile notifications are connected correctly."
+        )
+        if args.dry_run:
+            print(message)
+            return 0
+        if not bot_token or not chat_id:
+            print("Telegram secrets are missing; test notification was not sent.")
+            return 0
+        send_telegram(message, bot_token, chat_id)
+        print("Sent Telegram test notification.")
+        return 0
 
     rows = fetch_open_ipo_rows()
     alerts = build_alerts(rows)
@@ -174,8 +196,6 @@ def main() -> int:
     if args.dry_run:
         print(message)
     else:
-        bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-        chat_id = os.environ.get("TELEGRAM_CHAT_ID", "")
         if not bot_token or not chat_id:
             print("Telegram secrets are missing; alerts were detected but not sent.")
             print(message)

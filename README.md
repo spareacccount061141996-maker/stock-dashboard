@@ -29,6 +29,6 @@ To enable it, create a Telegram bot with BotFather, send one message to the bot 
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_CHAT_ID`
 
-The workflow can also be run manually from GitHub Actions under **IPO Mobile Alerts**.
+The workflow can also be run manually from GitHub Actions under **IPO Mobile Alerts**. Keep **Send a Telegram test notification** set to `true` for the first manual run to confirm the bot is connected.
 
 This is an educational tool only. Always verify option prices, liquidity, lot size, margin, and tax treatment before placing trades.
