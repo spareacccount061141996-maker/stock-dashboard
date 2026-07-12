@@ -17,4 +17,18 @@ The app loads the next three RELIANCE NFO stock expiries from Zerodha Kite's pub
 
 The Open IPOs tab attempts to fetch open IPO GMP data from IPOWatch and falls back to a curated current list if the source is blocked. It includes GMP, price band, estimated listing, IPO details links, an AI research link, and an alert flag for good/high GMP on the second-last subscription day.
 
+## Mobile IPO Alerts
+
+The repository includes an optional Telegram-based mobile alert workflow. It scans open IPOs on weekdays and sends a phone notification when:
+
+- Mainboard IPO estimated GMP/listing premium is at least 10%.
+- SME IPO estimated GMP/listing premium is at least 25%.
+
+To enable it, create a Telegram bot with BotFather, send one message to the bot from your phone, then add these GitHub repository secrets:
+
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_CHAT_ID`
+
+The workflow can also be run manually from GitHub Actions under **IPO Mobile Alerts**.
+
 This is an educational tool only. Always verify option prices, liquidity, lot size, margin, and tax treatment before placing trades.
