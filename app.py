@@ -1184,7 +1184,7 @@ def render_shortlist_tab(shortlist: pd.DataFrame, corpus: float) -> None:
         table_height = min(7200, max(260, 36 * (len(display_df) + 1)))
         st.dataframe(
             display_df[display_columns],
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             height=table_height,
             column_config={
@@ -1341,11 +1341,11 @@ def render_ipo_cards(ipo_frame: pd.DataFrame) -> None:
         link_cols = st.columns(2)
         with link_cols[0]:
             st.link_button(
-                "IPO Details", str(row.get("Source", IPOWATCH_GMP_URL)), use_container_width=True
+                "IPO Details", str(row.get("Source", IPOWATCH_GMP_URL)), width="stretch"
             )
         with link_cols[1]:
             st.link_button(
-                "AI Research", str(row.get("AI Research", "")), use_container_width=True
+                "AI Research", str(row.get("AI Research", "")), width="stretch"
             )
 
 
@@ -1397,7 +1397,7 @@ def render_ipo_tab() -> None:
     ]
     st.dataframe(
         ipo_frame[display_columns],
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
         column_config={
             "Source": st.column_config.LinkColumn(
@@ -1502,7 +1502,7 @@ def main() -> None:
             default=fo_symbols,
             help="All hardcoded F&O stocks load by default. Remove names if you want a faster scan.",
         )
-        if st.button("Refresh Data", use_container_width=True):
+        if st.button("Refresh Data", width="stretch"):
             st.cache_data.clear()
             st.rerun()
         st.caption(
