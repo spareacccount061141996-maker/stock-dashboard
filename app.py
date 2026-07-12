@@ -512,54 +512,98 @@ def gmp_score(gmp_text: str, estimated_listing_text: str) -> float:
     return first_number(gmp_text) or 0.0
 
 
-def parse_ipo_end_date(date_text: str, today: date | None = None) -> date | None:
-    current_date = today or date.today()
-    month_names = {
-        "jan": 1,
-        "january": 1,
-        "feb": 2,
-        "february": 2,
-        "mar": 3,
-        "march": 3,
-        "apr": 4,
-        "april": 4,
-        "may": 5,
-        "jun": 6,
-        "june": 6,
-        "jul": 7,
-        "july": 7,
-        "aug": 8,
-        "august": 8,
-        "sep": 9,
-        "sept": 9,
-        "september": 9,
-        "oct": 10,
-        "october": 10,
-        "nov": 11,
-        "november": 11,
-        "dec": 12,
-        "december": 12,
-    }
-    parts = date_text.replace(",", " ").replace("-", " ").split()
-    if len(parts) < 2:
-        return None
+MONTH_NAMES = {
+    "jan": 1,
+    "january": 1,
+    "feb": 2,
+    "february": 2,
+    "mar": 3,
+    "march": 3,
+    "apr": 4,
+    "april": 4,
+    "may": 5,
+    "jun": 6,
+    "june": 6,
+    "jul": 7,
+    "july": 7,
+    "aug": 8,
+    "august": 8,
+    "sep": 9,
+    "sept": 9,
+    "september": 9,
+    "oct": 10,
+    "october": 10,
+    "nov": 11,
+    "november": 11,
+    "dec": 12,
+    "december": 12,
+}
 
-    month = None
-    for part in reversed(parts):
-        lower = part.lower()
-        if lower in month_names:
-            month = month_names[lower]
-            break
+
+def build_ipo_date(day: str, month_text: str, today: date | None = None) -> date | None:
+    current_date = today or date.today()
+    month = MONTH_NAMES.get(month_text.lower())
     if month is None:
         return None
-
-    day_numbers = [int(part) for part in parts if part.isdigit()]
-    if not day_numbers:
-        return None
     try:
-        return date(current_date.year, month, day_numbers[-1])
+        return date(current_date.year, month, int(day))
     except ValueError:
         return None
+
+
+def format_ipo_date(value: date | None) -> str:
+    return value.strftime("%d %b %Y") if value else "NA"
+
+
+def parse_ipo_date_window(
+    date_text: str, today: date | None = None
+) -> tuple[str, str, date | None]:
+    cleaned_text = (
+        str(date_text)
+        .replace(",", " ")
+        .replace("\u2013", "-")
+        .replace("\u2014", "-")
+    )
+
+    same_month = re.search(
+        r"\b(\d{1,2})\s*-\s*(\d{1,2})\s+([A-Za-z]+)\b", cleaned_text
+    )
+    if same_month:
+        start_date = build_ipo_date(same_month.group(1), same_month.group(3), today)
+        end_date = build_ipo_date(same_month.group(2), same_month.group(3), today)
+        return format_ipo_date(start_date), format_ipo_date(end_date), end_date
+
+    two_months = re.search(
+        r"\b(\d{1,2})\s+([A-Za-z]+)\s*-\s*(\d{1,2})\s+([A-Za-z]+)\b",
+        cleaned_text,
+    )
+    if two_months:
+        start_date = build_ipo_date(two_months.group(1), two_months.group(2), today)
+        end_date = build_ipo_date(two_months.group(3), two_months.group(4), today)
+        return format_ipo_date(start_date), format_ipo_date(end_date), end_date
+
+    single_date = re.search(r"\b(\d{1,2})\s+([A-Za-z]+)\b", cleaned_text)
+    if single_date:
+        start_date = build_ipo_date(single_date.group(1), single_date.group(2), today)
+        return format_ipo_date(start_date), "NA", None
+
+    return "NA", "NA", None
+
+
+def parse_ipo_end_date(date_text: str, today: date | None = None) -> date | None:
+    _, _, end_date = parse_ipo_date_window(date_text, today)
+    return end_date
+
+
+def enrich_ipo_frame(frame: pd.DataFrame) -> pd.DataFrame:
+    frame = frame.copy()
+    date_windows = frame["Date"].map(parse_ipo_date_window)
+    frame["IPO Start Date"] = date_windows.map(lambda value: value[0])
+    frame["IPO Last Date"] = date_windows.map(lambda value: value[1])
+    frame["Research Note"] = frame["IPO GMP"].map(gmp_research_note)
+    frame["Alert"] = frame.apply(ipo_alert_text, axis=1)
+    frame["AI Research"] = frame["IPO Name"].map(ipo_research_link)
+    return frame
 
 
 def ipo_alert_text(row: pd.Series, today: date | None = None) -> str:
@@ -622,10 +666,7 @@ def fallback_open_ipos() -> pd.DataFrame:
         },
     ]
     frame = pd.DataFrame(rows)
-    frame["Research Note"] = frame["IPO GMP"].map(gmp_research_note)
-    frame["Alert"] = frame.apply(ipo_alert_text, axis=1)
-    frame["AI Research"] = frame["IPO Name"].map(ipo_research_link)
-    return frame
+    return enrich_ipo_frame(frame)
 
 
 @st.cache_data(ttl=30 * 60, show_spinner=False)
@@ -694,10 +735,7 @@ def fetch_open_ipos() -> tuple[pd.DataFrame, str]:
                 "Source",
             ]
         ]
-        frame["Research Note"] = frame["IPO GMP"].map(gmp_research_note)
-        frame["Alert"] = frame.apply(ipo_alert_text, axis=1)
-        frame["AI Research"] = frame["IPO Name"].map(ipo_research_link)
-        return frame, "IPOWatch"
+        return enrich_ipo_frame(frame), "IPOWatch"
     except Exception:
         return fallback_open_ipos(), "Fallback"
 
@@ -1266,11 +1304,15 @@ def render_ipo_cards(ipo_frame: pd.DataFrame) -> None:
         html = (
             '<div class="mobile-card">'
             f'<div class="mobile-card-title">{escape(str(row["IPO Name"]))}</div>'
-            f'<div class="mobile-card-subtitle">{escape(str(row["Type"]))} | {escape(str(row["Date"]))}</div>'
+            f'<div class="mobile-card-subtitle">{escape(str(row["Type"]))} | '
+            f'{escape(str(row["IPO Start Date"]))} to '
+            f'{escape(str(row["IPO Last Date"]))}</div>'
             '<div class="mobile-card-grid">'
             + render_value("GMP", str(row["IPO GMP"]))
             + render_value("Price Band", str(row["Price Band"]))
             + render_value("Est. Listing", str(row["Est. Listing"]))
+            + render_value("IPO Start", str(row["IPO Start Date"]))
+            + render_value("Last Date", str(row["IPO Last Date"]))
             + render_value("Status", str(row["Status"]))
             + "</div>"
             f'<div class="mobile-card-note">{escape(str(row["Research Note"]))}'
@@ -1314,6 +1356,8 @@ def render_ipo_tab() -> None:
         "Price Band",
         "Est. Listing",
         "Date",
+        "IPO Start Date",
+        "IPO Last Date",
         "Type",
         "Status",
         "Alert",
