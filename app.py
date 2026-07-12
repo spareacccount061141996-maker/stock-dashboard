@@ -597,7 +597,25 @@ def parse_ipo_end_date(date_text: str, today: date | None = None) -> date | None
 
 def enrich_ipo_frame(frame: pd.DataFrame) -> pd.DataFrame:
     frame = frame.copy()
-    date_windows = frame["Date"].map(parse_ipo_date_window)
+    for column in [
+        "IPO Name",
+        "IPO GMP",
+        "Price Band",
+        "Est. Listing",
+        "Date",
+        "Type",
+        "Status",
+        "Last Updated",
+        "Source",
+    ]:
+        if column not in frame.columns:
+            frame[column] = "NA"
+    frame["Source"] = frame["Source"].fillna("").astype(str)
+    frame.loc[~frame["Source"].str.startswith(("http://", "https://")), "Source"] = (
+        IPOWATCH_GMP_URL
+    )
+
+    date_windows = frame["Date"].fillna("NA").astype(str).map(parse_ipo_date_window)
     frame["IPO Start Date"] = date_windows.map(lambda value: value[0])
     frame["IPO Last Date"] = date_windows.map(lambda value: value[1])
     frame["Research Note"] = frame["IPO GMP"].map(gmp_research_note)
@@ -1303,32 +1321,37 @@ def render_ipo_cards(ipo_frame: pd.DataFrame) -> None:
     for _, row in ipo_frame.iterrows():
         html = (
             '<div class="mobile-card">'
-            f'<div class="mobile-card-title">{escape(str(row["IPO Name"]))}</div>'
-            f'<div class="mobile-card-subtitle">{escape(str(row["Type"]))} | '
-            f'{escape(str(row["IPO Start Date"]))} to '
-            f'{escape(str(row["IPO Last Date"]))}</div>'
+            f'<div class="mobile-card-title">{escape(str(row.get("IPO Name", "NA")))}</div>'
+            f'<div class="mobile-card-subtitle">{escape(str(row.get("Type", "NA")))} | '
+            f'{escape(str(row.get("IPO Start Date", "NA")))} to '
+            f'{escape(str(row.get("IPO Last Date", "NA")))}</div>'
             '<div class="mobile-card-grid">'
-            + render_value("GMP", str(row["IPO GMP"]))
-            + render_value("Price Band", str(row["Price Band"]))
-            + render_value("Est. Listing", str(row["Est. Listing"]))
-            + render_value("IPO Start", str(row["IPO Start Date"]))
-            + render_value("Last Date", str(row["IPO Last Date"]))
-            + render_value("Status", str(row["Status"]))
+            + render_value("GMP", str(row.get("IPO GMP", "NA")))
+            + render_value("Price Band", str(row.get("Price Band", "NA")))
+            + render_value("Est. Listing", str(row.get("Est. Listing", "NA")))
+            + render_value("IPO Start", str(row.get("IPO Start Date", "NA")))
+            + render_value("Last Date", str(row.get("IPO Last Date", "NA")))
+            + render_value("Status", str(row.get("Status", "NA")))
             + "</div>"
-            f'<div class="mobile-card-note">{escape(str(row["Research Note"]))}'
-            f'{("<br>" + escape(str(row["Alert"]))) if str(row["Alert"]) else ""}</div>'
+            f'<div class="mobile-card-note">{escape(str(row.get("Research Note", "")))}'
+            f'{("<br>" + escape(str(row.get("Alert", "")))) if str(row.get("Alert", "")) else ""}</div>'
             "</div>"
         )
         st.markdown(html, unsafe_allow_html=True)
         link_cols = st.columns(2)
         with link_cols[0]:
-            st.link_button("IPO Details", str(row["Source"]), use_container_width=True)
+            st.link_button(
+                "IPO Details", str(row.get("Source", IPOWATCH_GMP_URL)), use_container_width=True
+            )
         with link_cols[1]:
-            st.link_button("AI Research", str(row["AI Research"]), use_container_width=True)
+            st.link_button(
+                "AI Research", str(row.get("AI Research", "")), use_container_width=True
+            )
 
 
 def render_ipo_tab() -> None:
     ipo_frame, source_name = fetch_open_ipos()
+    ipo_frame = enrich_ipo_frame(ipo_frame)
     st.caption(
         f"Source: {source_name}. GMP is unofficial grey-market data and can change quickly."
     )
