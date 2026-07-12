@@ -2,15 +2,40 @@ name: Keep Streamlit App Awake
 
 on:
   schedule:
-    - cron: "17 */6 * * *"
+    - cron: "17 */4 * * *"
   workflow_dispatch:
 
 jobs:
   health-check:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 12
     steps:
       - name: Visit dashboard
+        shell: bash
         run: |
-          curl --fail --location --retry 3 --retry-delay 10 --max-time 60 \
-            "https://stock-dashboard-hedlfucmgdfondjkvaiwg7.streamlit.app/"
+          APP_URL="https://stock-dashboard-hedlfucmgdfondjkvaiwg7.streamlit.app/"
+
+          for attempt in {1..6}; do
+            status_code=$(curl \
+              --location \
+              --silent \
+              --show-error \
+              --output /tmp/streamlit-health.html \
+              --write-out "%{http_code}" \
+              --connect-timeout 20 \
+              --max-time 60 \
+              --user-agent "Mozilla/5.0 GitHubActions StreamlitKeepAlive/1.0" \
+              "$APP_URL" || true)
+
+            echo "Attempt ${attempt}: HTTP ${status_code}"
+
+            if [[ "$status_code" =~ ^[23][0-9][0-9]$ ]]; then
+              echo "Dashboard responded successfully."
+              exit 0
+            fi
+
+            sleep 30
+          done
+
+          echo "::warning::Dashboard did not return a success response after repeated attempts. This keep-awake run is best-effort and will not fail the workflow."
+          exit 0
