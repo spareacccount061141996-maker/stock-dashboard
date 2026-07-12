@@ -1581,4 +1581,17 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as error:
+        try:
+            st.set_page_config(
+                page_title="Cash-Secured Put Tracker",
+                page_icon="Rs",
+                layout="wide",
+            )
+        except Exception:
+            pass
+        st.title("Cash-Secured Put Strategy Tracker")
+        st.error("The dashboard hit a temporary data or runtime issue while loading.")
+        st.caption(f"Error: {error}")
